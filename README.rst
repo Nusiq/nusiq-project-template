@@ -21,6 +21,22 @@ The templates are in the `templates` subdirectory.
 
     Path(appdirs.user_data_dir('nusiq-project-template', 'templates'))
 
+Using the commandline tool
+--------------------------
+Project template is intended to be used as a commandline tool. In order to create new files based on a tepmlate simply run:
+
+.. code-block:: python
+
+    project-template build <template_name>
+
+In order to list available templates you can run:
+
+.. code-block:: python
+
+    project-template list
+
+The process of creating templates is described below in the *Template Structure* section of the documentation.
+
 Template structure
 ------------------
 
@@ -96,7 +112,7 @@ The *config.json* file is a JSON file with the following structure:
   :code:`{"uuid": uuid, "cwd_dir_name": <cwd_dir_name>}` (where :code:`uuid`
   is the Python's :code:`uuid` module and :code:`cwd_dir_name` is the name of
   the current working directory).
-- When using :code:`template list` command, the *config.json* file is not
+- When using :code:`project-template list` command, the *config.json* file is not
   evaluated so you can't create dynamic descriptions of the templates.
 
 Evaluating the Python code in the files
