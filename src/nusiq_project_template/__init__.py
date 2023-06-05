@@ -16,8 +16,15 @@ from better_json_tools.compact_encoder import CompactEncoder
 from better_json_tools.json_walker import JSONWalker
 from regolith_json_template import eval_json
 
-VERSION = (1, 0, 0)
+VERSION = (1, 1, 0)
 __version__ = '.'.join([str(x) for x in VERSION])
+
+ARG_TYPE_MAP = {
+    "str": str,
+    "int": int,
+    "float": float,
+    "bool": bool
+}
 
 class NusiqProjectTemplateError(Exception):
     '''Base class for all errors raised by this package'''
@@ -65,9 +72,10 @@ class TemplateConfig:
         self.scope = scope
 
     @staticmethod
-    def from_json_path(path: Path):
+    def from_path_and_args(path: Path, args: list[str]):
         '''
-        Creates TemplateConfig object from the path to the config.json file.
+        Creates TemplateConfig object from the path to the config.json file and
+        the arguments passed to the program.
         '''
         data_walker = load_jsonc(path)
         scope = (
@@ -122,6 +130,7 @@ class TemplateConfig:
             local_scope = local_scope_walker.data
         else:
             local_scope = {}
+        TemplateConfig._load_args(data_walker, local_scope, args)
         scope.update(local_scope)
         return TemplateConfig(
             files_path=path.parent / 'files',
@@ -131,6 +140,79 @@ class TemplateConfig:
             can_execute=can_execute,
             scope=scope
         )
+    
+    @staticmethod
+    def _get_arg_parser(data_walker: JSONWalker) -> argparse.ArgumentParser:
+        '''
+        Used in from_path_and_args to get the argument parser from the config.
+        '''
+        parser = argparse.ArgumentParser()
+        arg_config_walker = data_walker / 'arg_config'
+        if not arg_config_walker.exists:
+            return parser
+        if not isinstance(arg_config_walker.data, dict):
+            raise NusiqProjectTemplateError(dedent(f'''\
+                Invalid value for "arg_config".
+                JSON path: {arg_config_walker.path_str}
+                '''))
+        for arg_v_walker in arg_config_walker // str:
+            k = arg_v_walker.parent_key
+            add_argument_kwargs = {}
+            if (default_walker := arg_v_walker / 'default').exists:
+                add_argument_kwargs['default'] = default_walker.data
+            if (type_walker := arg_v_walker / 'type').exists:
+                if type_walker.data not in ARG_TYPE_MAP.keys():
+                    raise NusiqProjectTemplateError(dedent(f'''\
+                        Invalid value for "type".
+                        JSON path: {type_walker.path_str}
+                        Allowed values: {", ".join(ARG_TYPE_MAP.keys())}
+                        '''))
+                add_argument_kwargs['type'] = ARG_TYPE_MAP[type_walker.data]
+            if (nargs_walker := arg_v_walker / 'nargs').exists:
+                if (
+                        not isinstance(nargs_walker.data, int) and
+                        nargs_walker.data not in ["?", "*", "+"]):
+                    raise NusiqProjectTemplateError(dedent(f'''\
+                        The "nargs" property must be an interger or one of '''
+                        f'''the following strings: "?", "*", "+".
+                        JSON path: {nargs_walker.path_str}
+                        '''))
+                add_argument_kwargs['nargs'] = nargs_walker.data
+            if (help_walker := arg_v_walker / 'help').exists:
+                if not isinstance(help_walker.data, str):
+                    raise NusiqProjectTemplateError(dedent(f'''\
+                        The "help" property must be a string.
+                        JSON path: {help_walker.path_str}
+                        '''))
+                add_argument_kwargs['help'] = help_walker.data
+            if (required_walker := arg_v_walker / 'required').exists:
+                if not isinstance(required_walker.data, bool):
+                    raise NusiqProjectTemplateError(dedent(f'''\
+                        The "required" property must be a boolean.
+                        JSON path: {required_walker.path_str}
+                        '''))
+                add_argument_kwargs['required'] = required_walker.data
+            parser.add_argument(k, **add_argument_kwargs)
+        return parser
+
+    @staticmethod
+    def _load_args(data_walker: JSONWalker, scope: dict[str, Any], args: list[str]):
+        '''
+        Used in from_path_and_args to load the arguments into scope. Modifies
+        the scope in place.
+        '''
+        try:
+            parser = TemplateConfig._get_arg_parser(data_walker)
+        except NusiqProjectTemplateError as e:
+            raise NusiqProjectTemplateError(dedent(f'''\
+                Unable to load the "arg_conifg" from the template config file.
+                JSON path: {e.json_path}
+
+                This error is caused by the following:
+                ''' + str(e)))
+        parsed_args = parser.parse_args(args)
+        scope.update(vars(parsed_args))
+        return
 
     @cached_property
     def can_override(self) -> set[Path]:
@@ -199,8 +281,7 @@ class TemplateConfig:
                 in_code = True
         return ''.join(parts)
 
-
-def build_template(template_name: str, skip_conflicts: bool = False):
+def build_template(template_name: str, skip_conflicts: bool, parser_args: list[str]):
     '''
     Builds the project from the template with the given name in the
     current working directory.
@@ -210,7 +291,9 @@ def build_template(template_name: str, skip_conflicts: bool = False):
         raise NusiqProjectTemplateError(
             f'Template "{template_name}" not found')
     try:
-        config = TemplateConfig.from_json_path(template_path / 'config.json')
+        config = TemplateConfig.from_path_and_args(
+            template_path / 'config.json',
+            parser_args)
     except NusiqProjectTemplateError as e:
         raise NusiqProjectTemplateError(dedent(f'''\
             Failed to load config.json of template - "{template_name}":
@@ -306,11 +389,17 @@ def main():
 
     parser_list = subparsers.add_parser('list')
 
+    try:
+        arg_split = sys.argv.index("--")
+    except ValueError:
+        arg_split = len(sys.argv)
+    main_args, parser_args = sys.argv[1:arg_split], sys.argv[arg_split + 1:]
+
     # Run
-    args = parser.parse_args()
+    args = parser.parse_args(main_args)
     try:
         if args.command == 'build':
-            build_template(args.template_name, args.skip_conflicts)
+            build_template(args.template_name, args.skip_conflicts, parser_args)
         elif args.command == 'list':
             list_templates()
         else:

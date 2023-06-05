@@ -1,3 +1,6 @@
+# 1.1.0
+Added the `arg_config` property to the template *config.json* file. It lets you specify the arguments that should be passed to the `tempalte build` command. The template build command creates an argument parser based on that property. In order to use the arguments of the template, separate them using double dashes (`--`). For example, `project-template build <template-name> -- --arg1 value1 --arg2 value2`. This also lets you use the `--help` argument to see the arguments of the template (e.g. `project-template build <template-name> -- --help`).
+
 # 1.0.0
 Implemented basic template features.
 

@@ -102,6 +102,42 @@ The *config.json* file is a JSON file with the following structure:
         "scope": {
             "variable1": "value1",
             "variable2": "value2"
+        },
+
+        // The definition of the arguments that can be passed using the
+        // commandline. The arguments are added to the scope, so they can be
+        // used by the templates.
+        "arg_config": {
+            // The properties are created using the "argparse" library from
+            // the standard Python library. This means that the properties like
+            // "--example-property" are converted to variables like
+            // "example_property" in the scope. The properties tha don't start
+            // with "--" are positional arguments and their order is based on
+            // the order in the JSON file.
+            // The properties of the arguments defined in the "arg_config" are
+            // passed to the "argparse.ArgumentParser.add_argument" method but
+            // not everything is supported. The example below shows all of the
+            // supported properties.
+            "--example-property": {
+                // The default value of the argument (optional).
+                "default": "example_default_value",
+
+                // The type of the argument (optional). Supported values:
+                // "str", "int", "float" and "bool".
+                "type": "str",
+
+                // The help message printed when using the "--help" argument
+                // (optional).
+                "help": "Example definition of the property",
+
+                // Number of the arguments to provide after the flag
+                // (optional). It must be an integer or one of the following:
+                // "*", "+", "?".
+                "nargs": 2,
+
+                // Whether the argument is required.
+                "required": true
+            }
         }
     }
 
@@ -146,3 +182,19 @@ The reult asumes that the current working directory is named :code:`my_project`.
     CWD dir name: my_project
 
     This is the end of the file.
+
+
+Using the commandline arguments
+-------------------------------
+
+Some of the templates can use additional commandline arguments. These arguments are defined in the *config.json* file in the :code:`arg_config` property. The arguments can be passed to the tempalte after double dash :code:`--`, for example:
+
+.. code-block::
+
+    project-template build <template_name> -- --example-property example_value
+
+You can use the `--help` argument to see the help about the template:
+
+.. code-block::
+
+    project-template build <template_name> -- --help
